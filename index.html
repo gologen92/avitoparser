@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Avito Parser</title>
+    <style>
+        body { 
+            font-family: Arial; 
+            padding: 20px; 
+            display: flex; 
+            font-size: 14px;
+            margin: 0;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        .main-content { 
+            flex: 1; 
+            padding-right: 20px;
+            min-width: 400px;
+            overflow: auto;
+        }
+        .saved-ads { 
+            width: 50%;
+            min-width: 400px;
+            border-left: 1px solid #ddd; 
+            padding-left: 20px;
+            background-color: #f9f9f9;
+            overflow: auto;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 6px; 
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+            position: relative;
+        }
+        .search-params {
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        .search-params td {
+            padding: 5px;
+        }
+        .search-params input, .search-params select {
+            width: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        .action-buttons {
+            margin-top: 10px;
+        }
+        .action-buttons button {
+            padding: 6px 12px;
+            margin-right: 5px;
+        }
+        .sortable { 
+            cursor: pointer; 
+            user-select: none; 
+            position: relative;
+            padding-right: 15px;
+        }
+        .sort-icon {
+            position: absolute;
+            right: 3px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+        }
+        .action-btn {
+            padding: 2px 5px;
+            font-size: 11px;
+            margin-left: 3px;
+        }
+        #customDates {
+            margin-top: 5px;
+        }
+        #customDates input {
+            width: calc(50% - 10px);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <h1>Avito Parser</h1>
+        
+        <table class="search-params">
+            <tr>
+                <td width="30%">Ключевые слова:</td>
+                <td><input id="keyword" placeholder="Введите ключевые слова"></td>
+            </tr>
+            <tr>
+                <td>Максимальная цена:</td>
+                <td><input id="price" placeholder="Введите максимальную цену"></td>
+            </tr>
+            <tr>
+                <td>Город:</td>
+                <td><input id="city" placeholder="Введите город"></td>
+            </tr>
+            <tr>
+                <td>Количество объявлений:</td>
+                <td><input id="limit" type="number" min="1" value="50"></td>
+            </tr>
+            <tr>
+                <td>Период:</td>
+                <td>
+                    <select id="dateFilter">
+                        <option value="today">За сегодня</option>
+                        <option value="all">За всё время</option>
+                        <option value="custom">Произвольный период</option>
+                    </select>
+                    <div id="customDates" style="display: none;">
+                        <input type="date" id="dateFrom"> до <input type="date" id="dateTo">
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="action-buttons">
+            <button id="startBtn">Начать поиск</button>
+            <button id="clearBtn">Очистить</button>
+        </div>
+        
+        <div id="output" style="margin-top: 10px;"></div>
+        
+        <h2>Результат</h2>
+        <table id="results-table">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="title">Название <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="price">Цена <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="date">Когда размещено <span class="sort-icon"></span></th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+        </table>
+    </div>
+
+    <div class="saved-ads">
+        <h2>Сохраненные объявления</h2>
+        <table id="saved-table">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="title">Название <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="price">Цена <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="date">Когда размещено <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="saved_at">Когда сохранено <span class="sort-icon"></span></th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="saved-body"></tbody>
+        </table>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
