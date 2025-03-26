@@ -1,173 +1,232 @@
 const puppeteer = require('puppeteer');
+const { setTimeout } = require('timers/promises');
 
+// Конфигурация
+const CONFIG = {
+  maxRetries: 3,
+  navigationTimeout: 90000, // 1.5 минуты
+  waitForSelectorTimeout: 20000, // 20 секунд
+  delayBetweenRetries: 10000, // 10 секунд
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  viewport: { width: 1280, height: 1024 }
+};
+
+// Транслитерация городов (сокращенная версия)
 function transliterateCity(cityName) {
-  // Полный словарь транслитерации Avito
-  const cyrillicToLatin = {
-    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd',
-    'е': 'e', 'ё': 'yo', 'ж': 'zh', 'з': 'z', 'и': 'i',
-    'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n',
-    'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
-    'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch',
-    'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '',
-    'э': 'e', 'ю': 'yu', 'я': 'ya',
-    ' ': '-', '_': '-', "'": '', '`': '', ',': ''
-  };
-
-  // Специальные исключения для городов
-  const exceptions = {
-    'балашиха': 'balashikha',
-    'брянск': 'bryansk',
-    'волгоград': 'volgograd', // "ь" отсутствует, но добавлен для единообразия
-    'воронеж': 'voronezh',
-    'екатеринбург': 'ekaterinburg',
-    'иваново': 'ivanovo',
-    'ижевск': 'izhevsk',
-    'йошкар-ола': 'yoshkar-ola',
-    'казань': 'kazan',
-    'калуга': 'kaluga',
-    'курск': 'kursk',
-    'липецк': 'lipetsk',
-    'люберцы': 'lyubertsy',
+  if (!cityName || cityName.toLowerCase() === 'россия') return 'rossiya';
+  
+  const dict = {
     'москва': 'moskva',
-    'мытищи': 'mytishchi',
-    'нижний новгород': 'nizhniy_novgorod',
-    'новороссийск': 'novorossiysk',
-    'орёл': 'orel',
-    'пенза': 'penza',
-    'пермь': 'perm',
-    'подольск': 'podolsk',
-    'ростов-на-дону': 'rostov-na-donu',
-    'рязань': 'ryazan',
-    'самара': 'samara',
     'санкт-петербург': 'sankt-peterburg',
-    'саратов': 'saratov',
-    'сергиев посад': 'sergiev-posad',
-    'смоленск': 'smolensk',
-    'ставрополь': 'stavropol',
-    'тверь': 'tver',
-    'тольятти': 'tolyatti',
-    'томск': 'tomsk',
-    'тула': 'tula',
-    'тюмень': 'tyumen',
-    'улан-удэ': 'ulan-ude',
-    'ульяновск': 'ulyanovsk',
-    'уфа': 'ufa',
-    'чебоксары': 'cheboksary',
-    'челябинск': 'chelyabinsk',
-    'ярославль': 'yaroslavl',
-    //Крым
-    'симферополь': 'simferopol',
-    'севастополь': 'sevastopol',
-    'ялта': 'yalta',
-    'керчь': 'kerch',
-    'феодосия': 'feodosiya'
-
+    'новосибирск': 'novosibirsk',
+    'екатеринбург': 'ekaterinburg',
+    'казань': 'kazan',
+    'нижний новгород': 'nizhniy_novgorod',
+    'ростов-на-дону': 'rostov-na-donu'
   };
-
-  const lowerCity = cityName.toLowerCase().trim();
-  return exceptions[lowerCity] || 
-    lowerCity.split('').map(char => cyrillicToLatin[char] || char).join('')
-      .replace(/[-]{2,}/g, '-')
-      .replace(/^-|-$/g, '');
+  
+  return dict[cityName.toLowerCase()] || cityName.toLowerCase();
 }
 
 async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox'],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
-    });
+  let browser;
+  let page;
+  let retryCount = 0;
+  let lastError = null;
 
-    const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(60000);
-
+  while (retryCount < CONFIG.maxRetries) {
     try {
-        const url = `https://www.avito.ru/${transliterateCity(city)}?q=${encodeURIComponent(keyword)}&pmax=${maxPrice}`;
-        await page.goto(url, { waitUntil: 'networkidle2' });
-        await page.waitForSelector('[data-marker="item"]', { timeout: 15000 });
+      console.log(`[Попытка ${retryCount + 1}] Запуск браузера...`);
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage'
+        ],
+        timeout: CONFIG.navigationTimeout
+      });
 
-        const ads = await page.evaluate(() => {
-            function normalizeDate(dateText) {
-                const now = new Date();
-                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                
-                if (dateText.includes('сегодня')) {
-                    const time = dateText.replace('сегодня', '').trim();
-                    const [hours, minutes] = time.split(':').map(Number);
-                    const date = new Date(today);
-                    date.setHours(hours, minutes);
-                    return date.toISOString();
-                }
-                else if (dateText.includes('вчера')) {
-                    const time = dateText.replace('вчера', '').trim();
-                    const [hours, minutes] = time.split(':').map(Number);
-                    const date = new Date(today);
-                    date.setDate(date.getDate() - 1);
-                    date.setHours(hours, minutes);
-                    return date.toISOString();
-                }
-                else {
-                    const months = {
-                        'января': 0, 'февраля': 1, 'марта': 2, 'апреля': 3,
-                        'мая': 4, 'июня': 5, 'июля': 6, 'августа': 7,
-                        'сентября': 8, 'октября': 9, 'ноября': 10, 'декабря': 11
-                    };
-                    
-                    const parts = dateText.split(' ');
-                    if (parts.length === 3) {
-                        const day = parseInt(parts[0]);
-                        const month = months[parts[1]];
-                        const [hours, minutes] = parts[2].split(':').map(Number);
-                        const date = new Date(now.getFullYear(), month, day, hours, minutes);
-                        return date.toISOString();
-                    }
-                }
-                return new Date().toISOString();
-            }
+      page = await browser.newPage();
+      await page.setUserAgent(CONFIG.userAgent);
+      await page.setViewport(CONFIG.viewport);
+      await page.setDefaultTimeout(CONFIG.waitForSelectorTimeout);
 
-            return Array.from(document.querySelectorAll('[data-marker="item"]')).map(item => {
-                const priceElement = item.querySelector('[data-marker="item-price"]') || 
-                                    item.querySelector('[itemprop="price"]');
-                let price = '0';
-                if (priceElement) {
-                    price = priceElement.getAttribute('content') || 
-                            priceElement.textContent.replace(/\s+/g, '').match(/\d+/)?.[0] || 
-                            '0';
-                }
+      const url = `https://www.avito.ru/${transliterateCity(city)}?q=${encodeURIComponent(keyword)}${maxPrice ? `&pmax=${maxPrice}` : ''}`;
+      console.log(`[${retryCount + 1}] Загрузка страницы: ${url}`);
 
-                const dateElement = item.querySelector('[data-marker="item-date"]');
-                let date = '';
-                if (dateElement) {
-                    date = normalizeDate(dateElement.textContent.trim());
-                }
+      // Навигация с обработкой ошибок
+      const response = await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: CONFIG.navigationTimeout
+      });
 
-                const linkElement = item.querySelector('[itemprop="url"]') || 
-                                  item.querySelector('[data-marker="item-title"]');
-                let link = '#';
-                if (linkElement) {
-                    link = linkElement.href || 
-                          'https://www.avito.ru' + linkElement.getAttribute('href');
-                }
+      if (!response.ok()) {
+        throw new Error(`HTTP ${response.status()} - ${response.statusText()}`);
+      }
 
-                return {
-                    title: item.querySelector('[itemprop="name"]')?.textContent.trim() || 'Без названия',
-                    price: price,
-                    priceNum: parseInt(price.replace(/\D/g, '')) || 0,
-                    link: link,
-                    date: date || new Date().toISOString()
-                };
-            });
+      // Проверка на блокировку
+      const isBlocked = await page.evaluate(() => {
+        const captcha = document.querySelector('.captcha, .captcha-container');
+        const blocked = document.body.textContent.includes('Доступ ограничен');
+        return !!captcha || blocked;
+      });
+
+      if (isBlocked) {
+        throw new Error('Обнаружена CAPTCHA или блокировка доступа');
+      }
+
+      console.log(`[${retryCount + 1}] Ожидание списка объявлений...`);
+      
+      // Ждем появления хотя бы одного объявления
+      try {
+        await page.waitForSelector('[data-marker="item"], .iva-item-root', {
+          timeout: CONFIG.waitForSelectorTimeout
         });
+      } catch (e) {
+        // Проверяем вручную, если стандартное ожидание не сработало
+        const hasItems = await page.evaluate(() => {
+          return document.querySelectorAll('[data-marker="item"], .iva-item-root').length > 0;
+        });
+        
+        if (!hasItems) {
+          throw new Error('Не найдено ни одного объявления на странице');
+        }
+      }
 
-        return ads.slice(0, limit).filter(ad => ad.title !== 'Без названия' && ad.link !== '#');
+      console.log(`[${retryCount + 1}] Парсинг данных...`);
+      const ads = await parsePageData(page, limit);
+      
+      if (ads.length === 0 && retryCount < CONFIG.maxRetries - 1) {
+        throw new Error('Получен пустой список объявлений');
+      }
+
+      return ads;
 
     } catch (error) {
-        console.error('Ошибка парсинга:', error);
-        await page.screenshot({ path: 'error.png' });
-        return [];
+      lastError = error;
+      retryCount++;
+      console.error(`[Ошибка ${retryCount}]: ${error.message}`);
+
+      // Сохраняем скриншот для отладки
+      if (page) {
+        await page.screenshot({ path: `error_attempt_${retryCount}.png` });
+      }
+
+      if (retryCount < CONFIG.maxRetries) {
+        console.log(`Повторная попытка через ${CONFIG.delayBetweenRetries/1000} сек...`);
+        await setTimeout(CONFIG.delayBetweenRetries);
+      }
     } finally {
-        await browser.close();
+      if (page) await page.close();
+      if (browser) await browser.close();
     }
+  }
+
+  throw new Error(`Все попытки завершились ошибкой. Последняя ошибка: ${lastError.message}`);
+}
+
+// Парсинг данных со страницы
+async function parsePageData(page, limit) {
+  return await page.evaluate((limit) => {
+    function parseDate(dateText) {
+      if (!dateText) return new Date().toISOString();
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // "Сегодня, 12:30"
+      if (/сегодня/i.test(dateText)) {
+        const time = dateText.replace(/сегодня\D*/i, '').trim();
+        const [hours, minutes] = time.split(':').map(Number);
+        const date = new Date(today);
+        date.setHours(hours, minutes);
+        return date.toISOString();
+      }
+
+      // "Вчера, 15:45"
+      if (/вчера/i.test(dateText)) {
+        const time = dateText.replace(/вчера\D*/i, '').trim();
+        const [hours, minutes] = time.split(':').map(Number);
+        const date = new Date(today);
+        date.setDate(date.getDate() - 1);
+        date.setHours(hours, minutes);
+        return date.toISOString();
+      }
+
+      // "5 мая 2023"
+      const months = {
+        'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
+        'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
+        'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
+      };
+
+      const match = dateText.match(/(\d{1,2})\s+([а-я]+)\s+(\d{4})?/i);
+      if (match) {
+        const day = parseInt(match[1]);
+        const monthName = match[2].toLowerCase();
+        const year = match[3] ? parseInt(match[3]) : now.getFullYear();
+        
+        let month = -1;
+        for (const [key, value] of Object.entries(months)) {
+          if (monthName.startsWith(key)) {
+            month = value;
+            break;
+          }
+        }
+
+        if (month >= 0) {
+          return new Date(year, month, day).toISOString();
+        }
+      }
+
+      return new Date().toISOString();
+    }
+
+    const items = Array.from(document.querySelectorAll('[data-marker="item"], .iva-item-root'));
+    const results = [];
+
+    for (const item of items.slice(0, limit)) {
+      try {
+        // Название
+        const titleEl = item.querySelector('[itemprop="name"], .iva-item-titleStep-2bjhf');
+        const title = titleEl ? titleEl.textContent.trim() : 'Без названия';
+
+        // Цена
+        const priceEl = item.querySelector('[itemprop="price"], .iva-item-priceStep-2qRpg');
+        let price = '0';
+        if (priceEl) {
+          price = priceEl.getAttribute('content') || 
+                 priceEl.textContent.replace(/\D+/g, '') || '0';
+        }
+
+        // Ссылка
+        const linkEl = item.querySelector('[itemprop="url"], .iva-item-titleStep-2bjhf a');
+        let link = '#';
+        if (linkEl) {
+          link = linkEl.href || `https://www.avito.ru${linkEl.getAttribute('href')}`;
+        }
+
+        // Дата
+        const dateEl = item.querySelector('[data-marker="item-date"], .iva-item-dateInfoStep-2uc5s');
+        const date = dateEl ? parseDate(dateEl.textContent) : new Date().toISOString();
+
+        if (title !== 'Без названия' && link !== '#') {
+          results.push({
+            title,
+            price,
+            priceNum: parseInt(price.replace(/\D+/g, '')) || 0,
+            link,
+            date
+          });
+        }
+      } catch (e) {
+        console.error('Ошибка парсинга элемента:', e);
+      }
+    }
+
+    return results;
+  }, limit);
 }
 
 module.exports = parseAvito;
