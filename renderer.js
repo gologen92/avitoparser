@@ -177,24 +177,24 @@ document.addEventListener('DOMContentLoaded', () => {
   
     // Форматирование даты и времени
     function formatDateTime(dateString) {
-      if (!dateString) return 'Нет данных';
-      
-      try {
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return 'Некорректная дата';
+        if (!dateString) return 'Нет данных';
         
-        return date.toLocaleString('ru-RU', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      } catch (e) {
-        console.error('Ошибка форматирования даты:', e);
-        return 'Ошибка даты';
+        try {
+          const date = new Date(dateString);
+          if (isNaN(date.getTime())) return 'Некорректная дата';
+          
+          return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        } catch (e) {
+          console.error('Ошибка форматирования даты:', e);
+          return 'Ошибка даты';
+        }
       }
-    }
   
     // Экранирование HTML
     function escapeHtml(unsafe) {

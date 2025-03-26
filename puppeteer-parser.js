@@ -130,58 +130,61 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
 async function parsePageData(page, limit) {
   return await page.evaluate((limit) => {
     function parseDate(dateText) {
-      if (!dateText) return new Date().toISOString();
-
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-      // "Сегодня, 12:30"
-      if (/сегодня/i.test(dateText)) {
-        const time = dateText.replace(/сегодня\D*/i, '').trim();
-        const [hours, minutes] = time.split(':').map(Number);
-        const date = new Date(today);
-        date.setHours(hours, minutes);
-        return date.toISOString();
-      }
-
-      // "Вчера, 15:45"
-      if (/вчера/i.test(dateText)) {
-        const time = dateText.replace(/вчера\D*/i, '').trim();
-        const [hours, minutes] = time.split(':').map(Number);
-        const date = new Date(today);
-        date.setDate(date.getDate() - 1);
-        date.setHours(hours, minutes);
-        return date.toISOString();
-      }
-
-      // "5 мая 2023"
-      const months = {
-        'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
-        'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
-        'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
-      };
-
-      const match = dateText.match(/(\d{1,2})\s+([а-я]+)\s+(\d{4})?/i);
-      if (match) {
-        const day = parseInt(match[1]);
-        const monthName = match[2].toLowerCase();
-        const year = match[3] ? parseInt(match[3]) : now.getFullYear();
-        
-        let month = -1;
-        for (const [key, value] of Object.entries(months)) {
-          if (monthName.startsWith(key)) {
-            month = value;
-            break;
+        if (!dateText) return new Date().toISOString();
+      
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const timeRegex = /(\d{1,2}):(\d{1,2})/;
+      
+        try {
+          // Обработка "сегодня, 12:30"
+          if (/сегодня/i.test(dateText)) {
+            const timeMatch = dateText.match(timeRegex);
+            if (timeMatch) {
+              const date = new Date(today);
+              date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
+              return date.toISOString();
+            }
           }
+      
+          // Обработка "вчера, 15:45"
+          if (/вчера/i.test(dateText)) {
+            const timeMatch = dateText.match(timeRegex);
+            if (timeMatch) {
+              const date = new Date(today);
+              date.setDate(date.getDate() - 1);
+              date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
+              return date.toISOString();
+            }
+          }
+      
+          // Обработка "5 мая в 12:30" или "5 мая 2023 в 12:30"
+          const months = {
+            'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
+            'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
+            'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
+          };
+      
+          const dateMatch = dateText.match(/(\d{1,2})\s+([а-я]+)(?:\s+(\d{4}))?(?:\s+в\s+(\d{1,2}):(\d{1,2}))?/i);
+          if (dateMatch) {
+            const day = parseInt(dateMatch[1]);
+            const monthName = dateMatch[2].toLowerCase();
+            const year = dateMatch[3] ? parseInt(dateMatch[3]) : now.getFullYear();
+            const hours = dateMatch[4] ? parseInt(dateMatch[4]) : 0;
+            const minutes = dateMatch[5] ? parseInt(dateMatch[5]) : 0;
+      
+            for (const [key, value] of Object.entries(months)) {
+              if (monthName.startsWith(key)) {
+                return new Date(year, value, day, hours, minutes).toISOString();
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Ошибка парсинга даты:', e);
         }
-
-        if (month >= 0) {
-          return new Date(year, month, day).toISOString();
-        }
+      
+        return new Date().toISOString(); // Возвращаем текущую дату в случае ошибки
       }
-
-      return new Date().toISOString();
-    }
 
     const items = Array.from(document.querySelectorAll('[data-marker="item"], .iva-item-root'));
     const results = [];
