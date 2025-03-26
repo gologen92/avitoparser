@@ -88,6 +88,59 @@
             width: calc(50% - 10px);
         }
     </style>
+    <style>
+        /* Стили для модального окна Telegram */
+        .modal {
+          display: none;
+          position: fixed;
+          z-index: 1000;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(0,0,0,0.7);
+        }
+        
+        .modal-content {
+          background-color: #fefefe;
+          margin: 10% auto;
+          padding: 20px;
+          border: 1px solid #888;
+          width: 80%;
+          max-width: 500px;
+          border-radius: 5px;
+          box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+        }
+        
+        .close-btn {
+          color: #aaa;
+          float: right;
+          font-size: 28px;
+          font-weight: bold;
+          cursor: pointer;
+        }
+        
+        .close-btn:hover {
+          color: black;
+        }
+        
+        #openTelegramSettings {
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          padding: 10px 15px;
+          background: #555;
+          color: white;
+          border: none;
+          border-radius: 50%;
+          cursor: pointer;
+          z-index: 100;
+        }
+        
+        #openTelegramSettings:hover {
+          background: #333;
+        }
+      </style>
 </head>
 <body>
     <div class="main-content">
@@ -163,5 +216,30 @@
     </div>
 
     <script src="renderer.js"></script>
+
+    <div id="telegramModal" class="modal" style="display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.7);overflow:auto">
+        <div class="modal-content" style="background:#fefefe;margin:10% auto;padding:20px;border:1px solid #888;width:80%;max-width:500px;border-radius:5px;box-shadow:0 4px 8px 0 rgba(0,0,0,0.2)">
+          <span class="close-btn" style="float:right;font-size:28px;cursor:pointer">&times;</span>
+          <h2 style="color:#333">Настройки Telegram уведомлений</h2>
+          <div style="margin:15px 0">
+            <label style="display:block;margin-bottom:5px;font-weight:bold">Токен бота:</label>
+            <input type="text" id="telegramToken" placeholder="Введите токен бота" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px">
+            <small style="color:#666">Получить у @BotFather в Telegram</small>
+          </div>
+          <div style="margin:15px 0">
+            <label style="display:block;margin-bottom:5px;font-weight:bold">Chat ID:</label>
+            <input type="text" id="telegramChatId" placeholder="Введите chat ID" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px">
+            <small style="color:#666">Узнать у @userinfobot в Telegram</small>
+          </div>
+          <div style="margin-top:25px">
+            <button id="saveTelegramSettings" style="padding:10px 20px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:10px">Сохранить</button>
+            <button id="testTelegramSettings" style="padding:10px 20px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer">Проверить</button>
+          </div>
+          <div id="telegramTestResult" style="margin-top:15px;padding:10px;border-radius:4px;display:none"></div>
+        </div>
+      </div>
+      
+      <button id="openTelegramSettings" style="position:fixed;bottom:20px;right:20px;padding:10px 15px;background:#555;color:white;border:none;border-radius:50%;cursor:pointer;z-index:100">TG</button>
+
 </body>
 </html>

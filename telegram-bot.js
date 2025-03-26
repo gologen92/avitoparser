@@ -1,17 +1,34 @@
 const { Telegraf } = require('telegraf');
 
-// Инициализация бота
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '7684090580:AAHVWxTUJ9gB5F9vOvoS6GZuRsm4cB5-cks');
+function botInstance(token) {
+  if (!token) {
+    throw new Error('Токен бота не указан');
+  }
 
-// Функция для отправки уведомлений
-async function sendNotification(chatId, message) {
+  const bot = new Telegraf(token);
+  
+  bot.catch((err, ctx) => {
+    console.error('Telegram bot error:', err);
+  });
+
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+  bot.launch().catch(console.error);
+  
+  return bot;
+}
+
+async function sendNotification(bot, chatId, message) {
+  if (!bot || !chatId) return false;
+  
   try {
     await bot.telegram.sendMessage(
       chatId, 
       message,
       { 
         parse_mode: 'HTML',
-        disable_web_page_preview: true 
+        disable_web_page_preview: true
       }
     );
     return true;
@@ -21,9 +38,7 @@ async function sendNotification(chatId, message) {
   }
 }
 
-// Запуск бота в фоновом режиме
-bot.launch()
-  .then(() => console.log('Telegram bot connected'))
-  .catch(err => console.error('Telegram bot error:', err));
-
-module.exports = { sendNotification };
+module.exports = {
+  botInstance,
+  sendNotification
+};

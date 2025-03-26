@@ -1,17 +1,28 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { setTimeout } = require('timers/promises');
+const fs = require('fs');
+const path = require('path');
 
-// Конфигурация
+puppeteer.use(StealthPlugin());
+
+// Configuration
 const CONFIG = {
   maxRetries: 3,
-  navigationTimeout: 90000, // 1.5 минуты
-  waitForSelectorTimeout: 20000, // 20 секунд
-  delayBetweenRetries: 10000, // 10 секунд
+  navigationTimeout: 120000,
+  waitForSelectorTimeout: 30000,
+  delayBetweenRetries: 15000,
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  viewport: { width: 1280, height: 1024 }
+  viewport: { width: 1280, height: 1024 },
+  debugDir: path.join(__dirname, 'debug')
 };
 
-// Транслитерация городов (сокращенная версия)
+// Create debug directory if not exists
+if (!fs.existsSync(CONFIG.debugDir)) {
+  fs.mkdirSync(CONFIG.debugDir);
+}
+
+// City transliteration
 function transliterateCity(cityName) {
   if (!cityName || cityName.toLowerCase() === 'россия') return 'rossiya';
   
@@ -25,50 +36,75 @@ function transliterateCity(cityName) {
     'ростов-на-дону': 'rostov-na-donu'
   };
   
-  return dict[cityName.toLowerCase()] || cityName.toLowerCase();
+  return dict[cityName.toLowerCase()] || cityName.toLowerCase().replace(/\s+/g, '-');
 }
 
+// Main parsing function
 async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
   let browser;
   let page;
   let retryCount = 0;
   let lastError = null;
 
+  // Validate input
+  if (!keyword || typeof keyword !== 'string') {
+    throw new Error('Invalid keyword parameter');
+  }
+
   while (retryCount < CONFIG.maxRetries) {
     try {
-      console.log(`[Попытка ${retryCount + 1}] Запуск браузера...`);
+      console.log(`[Attempt ${retryCount + 1}/${CONFIG.maxRetries}] Launching browser...`);
+      
+      // Browser launch options
       browser = await puppeteer.launch({
         headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--window-size=1280,1024'
         ],
-        timeout: CONFIG.navigationTimeout
+        timeout: CONFIG.navigationTimeout,
+        ignoreHTTPSErrors: true
       });
 
       page = await browser.newPage();
       await page.setUserAgent(CONFIG.userAgent);
       await page.setViewport(CONFIG.viewport);
+      await page.setDefaultNavigationTimeout(CONFIG.navigationTimeout);
       await page.setDefaultTimeout(CONFIG.waitForSelectorTimeout);
 
-      const url = `https://www.avito.ru/${transliterateCity(city)}?q=${encodeURIComponent(keyword)}${maxPrice ? `&pmax=${maxPrice}` : ''}`;
-      console.log(`[${retryCount + 1}] Загрузка страницы: ${url}`);
+      // Set headers and cookies
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+      });
 
-      // Навигация с обработкой ошибок
+      const url = `https://www.avito.ru/${transliterateCity(city)}?q=${encodeURIComponent(keyword)}${maxPrice ? `&pmax=${maxPrice}` : ''}`;
+      console.log(`[Attempt ${retryCount + 1}] Loading URL: ${url}`);
+
+      // Random delay before navigation
+      await setTimeout(Math.random() * 3000 + 2000);
+
+      // Navigation with enhanced detection
       const response = await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: CONFIG.navigationTimeout
+        waitUntil: 'networkidle2',
+        timeout: CONFIG.navigationTimeout,
+        referer: 'https://www.avito.ru/'
       });
 
       if (!response.ok()) {
         throw new Error(`HTTP ${response.status()} - ${response.statusText()}`);
       }
 
-      // Проверка на блокировку
+      // Check for blocking
       const isBlocked = await page.evaluate(() => {
-        const captcha = document.querySelector('.captcha, .captcha-container');
-        const blocked = document.body.textContent.includes('Доступ ограничен');
+        const captcha = document.querySelector('.captcha, .captcha-container, div[class*="captcha"], iframe[src*="captcha"]');
+        const blocked = document.body.textContent.includes('Доступ ограничен') || 
+                      document.body.textContent.includes('Подозрительная активность') ||
+                      document.body.textContent.includes('Превышен лимит запросов');
         return !!captcha || blocked;
       });
 
@@ -76,25 +112,41 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
         throw new Error('Обнаружена CAPTCHA или блокировка доступа');
       }
 
-      console.log(`[${retryCount + 1}] Ожидание списка объявлений...`);
+      console.log(`[Attempt ${retryCount + 1}] Waiting for ads...`);
       
-      // Ждем появления хотя бы одного объявления
+      // Wait for ads with multiple conditions
       try {
-        await page.waitForSelector('[data-marker="item"], .iva-item-root', {
-          timeout: CONFIG.waitForSelectorTimeout
+        await page.waitForFunction(() => {
+          const items = document.querySelectorAll('[data-marker="item"], .iva-item-root');
+          return items.length > 0 || 
+                document.querySelector('.items-empty') || 
+                document.querySelector('.empty-results') ||
+                document.querySelector('.error-page');
+        }, { timeout: CONFIG.waitForSelectorTimeout });
+
+        // Check for no results
+        const noResults = await page.evaluate(() => {
+          return !!document.querySelector('.items-empty, .empty-results');
         });
-      } catch (e) {
-        // Проверяем вручную, если стандартное ожидание не сработало
-        const hasItems = await page.evaluate(() => {
-          return document.querySelectorAll('[data-marker="item"], .iva-item-root').length > 0;
-        });
-        
-        if (!hasItems) {
-          throw new Error('Не найдено ни одного объявления на странице');
+
+        if (noResults) {
+          console.log('No results found for the query');
+          return [];
         }
+
+        // Check for error page
+        const errorPage = await page.evaluate(() => {
+          return !!document.querySelector('.error-page');
+        });
+
+        if (errorPage) {
+          throw new Error('Avito returned an error page');
+        }
+      } catch (e) {
+        throw new Error('Не найдено ни одного объявления на странице');
       }
 
-      console.log(`[${retryCount + 1}] Парсинг данных...`);
+      console.log(`[Attempt ${retryCount + 1}] Parsing ads data...`);
       const ads = await parsePageData(page, limit);
       
       if (ads.length === 0 && retryCount < CONFIG.maxRetries - 1) {
@@ -106,96 +158,110 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
     } catch (error) {
       lastError = error;
       retryCount++;
-      console.error(`[Ошибка ${retryCount}]: ${error.message}`);
+      console.error(`[Attempt ${retryCount} Error]: ${error.message}`);
 
-      // Сохраняем скриншот для отладки
+      // Save debug information
       if (page) {
-        await page.screenshot({ path: `error_attempt_${retryCount}.png` });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        try {
+          await page.screenshot({ 
+            path: path.join(CONFIG.debugDir, `error_${timestamp}_attempt_${retryCount}.png`), 
+            fullPage: true 
+          });
+          const html = await page.content();
+          fs.writeFileSync(
+            path.join(CONFIG.debugDir, `error_${timestamp}_attempt_${retryCount}.html`), 
+            html
+          );
+        } catch (debugError) {
+          console.error('Failed to save debug files:', debugError);
+        }
       }
 
       if (retryCount < CONFIG.maxRetries) {
-        console.log(`Повторная попытка через ${CONFIG.delayBetweenRetries/1000} сек...`);
-        await setTimeout(CONFIG.delayBetweenRetries);
+        const delay = CONFIG.delayBetweenRetries * (retryCount * 0.5 + 1);
+        console.log(`Retrying in ${delay/1000} seconds...`);
+        await setTimeout(delay);
       }
     } finally {
-      if (page) await page.close();
-      if (browser) await browser.close();
+      if (page) await page.close().catch(console.error);
     }
   }
 
-  throw new Error(`Все попытки завершились ошибкой. Последняя ошибка: ${lastError.message}`);
+  if (browser) await browser.close().catch(console.error);
+  throw new Error(`All ${CONFIG.maxRetries} attempts failed. Last error: ${lastError.message}`);
 }
 
-// Парсинг данных со страницы
+// Page data parsing function
 async function parsePageData(page, limit) {
   return await page.evaluate((limit) => {
     function parseDate(dateText) {
-        if (!dateText) return new Date().toISOString();
-      
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const timeRegex = /(\d{1,2}):(\d{1,2})/;
-      
-        try {
-          // Обработка "сегодня, 12:30"
-          if (/сегодня/i.test(dateText)) {
-            const timeMatch = dateText.match(timeRegex);
-            if (timeMatch) {
-              const date = new Date(today);
-              date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
-              return date.toISOString();
-            }
+      if (!dateText) return new Date().toISOString();
+    
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const timeRegex = /(\d{1,2}):(\d{1,2})/;
+    
+      try {
+        // Today's time
+        if (/сегодня/i.test(dateText)) {
+          const timeMatch = dateText.match(timeRegex);
+          if (timeMatch) {
+            const date = new Date(today);
+            date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
+            return date.toISOString();
           }
-      
-          // Обработка "вчера, 15:45"
-          if (/вчера/i.test(dateText)) {
-            const timeMatch = dateText.match(timeRegex);
-            if (timeMatch) {
-              const date = new Date(today);
-              date.setDate(date.getDate() - 1);
-              date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
-              return date.toISOString();
-            }
-          }
-      
-          // Обработка "5 мая в 12:30" или "5 мая 2023 в 12:30"
-          const months = {
-            'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
-            'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
-            'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
-          };
-      
-          const dateMatch = dateText.match(/(\d{1,2})\s+([а-я]+)(?:\s+(\d{4}))?(?:\s+в\s+(\d{1,2}):(\d{1,2}))?/i);
-          if (dateMatch) {
-            const day = parseInt(dateMatch[1]);
-            const monthName = dateMatch[2].toLowerCase();
-            const year = dateMatch[3] ? parseInt(dateMatch[3]) : now.getFullYear();
-            const hours = dateMatch[4] ? parseInt(dateMatch[4]) : 0;
-            const minutes = dateMatch[5] ? parseInt(dateMatch[5]) : 0;
-      
-            for (const [key, value] of Object.entries(months)) {
-              if (monthName.startsWith(key)) {
-                return new Date(year, value, day, hours, minutes).toISOString();
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Ошибка парсинга даты:', e);
         }
-      
-        return new Date().toISOString(); // Возвращаем текущую дату в случае ошибки
+    
+        // Yesterday's time
+        if (/вчера/i.test(dateText)) {
+          const timeMatch = dateText.match(timeRegex);
+          if (timeMatch) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - 1);
+            date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
+            return date.toISOString();
+          }
+        }
+    
+        // Specific date
+        const months = {
+          'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
+          'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
+          'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
+        };
+    
+        const dateMatch = dateText.match(/(\d{1,2})\s+([а-я]+)(?:\s+(\d{4}))?(?:\s+в\s+(\d{1,2}):(\d{1,2}))?/i);
+        if (dateMatch) {
+          const day = parseInt(dateMatch[1]);
+          const monthName = dateMatch[2].toLowerCase();
+          const year = dateMatch[3] ? parseInt(dateMatch[3]) : now.getFullYear();
+          const hours = dateMatch[4] ? parseInt(dateMatch[4]) : 0;
+          const minutes = dateMatch[5] ? parseInt(dateMatch[5]) : 0;
+    
+          for (const [key, value] of Object.entries(months)) {
+            if (monthName.startsWith(key)) {
+              return new Date(year, value, day, hours, minutes).toISOString();
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Date parsing error:', e);
       }
+    
+      return new Date().toISOString();
+    }
 
     const items = Array.from(document.querySelectorAll('[data-marker="item"], .iva-item-root'));
     const results = [];
 
     for (const item of items.slice(0, limit)) {
       try {
-        // Название
+        // Title
         const titleEl = item.querySelector('[itemprop="name"], .iva-item-titleStep-2bjhf');
         const title = titleEl ? titleEl.textContent.trim() : 'Без названия';
 
-        // Цена
+        // Price
         const priceEl = item.querySelector('[itemprop="price"], .iva-item-priceStep-2qRpg');
         let price = '0';
         if (priceEl) {
@@ -203,16 +269,24 @@ async function parsePageData(page, limit) {
                  priceEl.textContent.replace(/\D+/g, '') || '0';
         }
 
-        // Ссылка
+        // Link
         const linkEl = item.querySelector('[itemprop="url"], .iva-item-titleStep-2bjhf a');
         let link = '#';
         if (linkEl) {
           link = linkEl.href || `https://www.avito.ru${linkEl.getAttribute('href')}`;
         }
 
-        // Дата
+        // Date
         const dateEl = item.querySelector('[data-marker="item-date"], .iva-item-dateInfoStep-2uc5s');
         const date = dateEl ? parseDate(dateEl.textContent) : new Date().toISOString();
+
+        // Description (if available)
+        const descEl = item.querySelector('[data-marker="item-specific-params"], .iva-item-descriptionStep-2qRpg');
+        const description = descEl ? descEl.textContent.trim() : '';
+
+        // Location (if available)
+        const locationEl = item.querySelector('[data-marker="item-address"], .iva-item-locationStep-2UHp2');
+        const location = locationEl ? locationEl.textContent.trim() : '';
 
         if (title !== 'Без названия' && link !== '#') {
           results.push({
@@ -220,11 +294,13 @@ async function parsePageData(page, limit) {
             price,
             priceNum: parseInt(price.replace(/\D+/g, '')) || 0,
             link,
-            date
+            date,
+            description,
+            location
           });
         }
       } catch (e) {
-        console.error('Ошибка парсинга элемента:', e);
+        console.error('Error parsing item:', e);
       }
     }
 
