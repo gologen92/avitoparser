@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Элементы DOM
   const startBtn = document.getElementById('startBtn');
   const clearBtn = document.getElementById('clearBtn');
   const outputDiv = document.getElementById('output');
@@ -14,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const dateFromInput = document.getElementById('dateFrom');
   const dateToInput = document.getElementById('dateTo');
   
-  // Telegram элементы
   const telegramModal = document.getElementById('telegramModal');
   const telegramTokenInput = document.getElementById('telegramToken');
   const telegramChatIdInput = document.getElementById('telegramChatId');
@@ -24,14 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const openTelegramBtn = document.getElementById('openTelegramSettings');
   const closeTelegramBtn = document.querySelector('.close-btn');
 
-  // Состояние приложения
   let currentResults = [];
   let savedAds = [];
   let currentSort = { field: null, order: 'asc' };
   let savedSort = { field: 'saved_at', order: 'desc' };
   let isParsing = false;
 
-  // Инициализация
   function init() {
       initSorting();
       loadSavedAds();
@@ -59,16 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
       clearBtn.addEventListener('click', clearResults);
   }
 
-  // Telegram UI
   function setupTelegramUI() {
-      // Восстановить сохраненные настройки
       const savedToken = localStorage.getItem('telegramToken');
       const savedChatId = localStorage.getItem('telegramChatId');
       
       if (savedToken) telegramTokenInput.value = savedToken;
       if (savedChatId) telegramChatIdInput.value = savedChatId;
 
-      // Обработчики событий
       openTelegramBtn.addEventListener('click', () => {
           telegramModal.style.display = 'block';
       });
