@@ -6,7 +6,6 @@ const path = require('path');
 
 puppeteer.use(StealthPlugin());
 
-// Configuration
 const CONFIG = {
   maxRetries: 3,
   navigationTimeout: 120000,
@@ -17,12 +16,10 @@ const CONFIG = {
   debugDir: path.join(__dirname, 'debug')
 };
 
-// Create debug directory if not exists
 if (!fs.existsSync(CONFIG.debugDir)) {
   fs.mkdirSync(CONFIG.debugDir);
 }
 
-// City transliteration
 function transliterateCity(cityName) {
   if (!cityName || cityName.toLowerCase() === 'россия') return 'rossiya';
   
@@ -39,14 +36,12 @@ function transliterateCity(cityName) {
   return dict[cityName.toLowerCase()] || cityName.toLowerCase().replace(/\s+/g, '-');
 }
 
-// Main parsing function
 async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
   let browser;
   let page;
   let retryCount = 0;
   let lastError = null;
 
-  // Validate input
   if (!keyword || typeof keyword !== 'string') {
     throw new Error('Invalid keyword parameter');
   }
@@ -76,7 +71,6 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
       await page.setDefaultNavigationTimeout(CONFIG.navigationTimeout);
       await page.setDefaultTimeout(CONFIG.waitForSelectorTimeout);
 
-      // Set headers and cookies
       await page.setExtraHTTPHeaders({
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
@@ -85,10 +79,8 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
       const url = `https://www.avito.ru/${transliterateCity(city)}?q=${encodeURIComponent(keyword)}${maxPrice ? `&pmax=${maxPrice}` : ''}`;
       console.log(`[Attempt ${retryCount + 1}] Loading URL: ${url}`);
 
-      // Random delay before navigation
       await setTimeout(Math.random() * 3000 + 2000);
 
-      // Navigation with enhanced detection
       const response = await page.goto(url, {
         waitUntil: 'networkidle2',
         timeout: CONFIG.navigationTimeout,
@@ -99,7 +91,6 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
         throw new Error(`HTTP ${response.status()} - ${response.statusText()}`);
       }
 
-      // Check for blocking
       const isBlocked = await page.evaluate(() => {
         const captcha = document.querySelector('.captcha, .captcha-container, div[class*="captcha"], iframe[src*="captcha"]');
         const blocked = document.body.textContent.includes('Доступ ограничен') || 
@@ -114,7 +105,6 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
 
       console.log(`[Attempt ${retryCount + 1}] Waiting for ads...`);
       
-      // Wait for ads with multiple conditions
       try {
         await page.waitForFunction(() => {
           const items = document.querySelectorAll('[data-marker="item"], .iva-item-root');
@@ -124,8 +114,7 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
                 document.querySelector('.error-page');
         }, { timeout: CONFIG.waitForSelectorTimeout });
 
-        // Check for no results
-        const noResults = await page.evaluate(() => {
+       const noResults = await page.evaluate(() => {
           return !!document.querySelector('.items-empty, .empty-results');
         });
 
@@ -134,7 +123,6 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
           return [];
         }
 
-        // Check for error page
         const errorPage = await page.evaluate(() => {
           return !!document.querySelector('.error-page');
         });
@@ -160,7 +148,6 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
       retryCount++;
       console.error(`[Attempt ${retryCount} Error]: ${error.message}`);
 
-      // Save debug information
       if (page) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         try {
@@ -192,7 +179,6 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
   throw new Error(`All ${CONFIG.maxRetries} attempts failed. Last error: ${lastError.message}`);
 }
 
-// Page data parsing function
 async function parsePageData(page, limit) {
   return await page.evaluate((limit) => {
     function parseDate(dateText) {
@@ -213,8 +199,7 @@ async function parsePageData(page, limit) {
           }
         }
     
-        // Yesterday's time
-        if (/вчера/i.test(dateText)) {
+       if (/вчера/i.test(dateText)) {
           const timeMatch = dateText.match(timeRegex);
           if (timeMatch) {
             const date = new Date(today);
@@ -224,8 +209,7 @@ async function parsePageData(page, limit) {
           }
         }
     
-        // Specific date
-        const months = {
+       const months = {
           'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
           'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
           'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
@@ -257,11 +241,9 @@ async function parsePageData(page, limit) {
 
     for (const item of items.slice(0, limit)) {
       try {
-        // Title
         const titleEl = item.querySelector('[itemprop="name"], .iva-item-titleStep-2bjhf');
         const title = titleEl ? titleEl.textContent.trim() : 'Без названия';
 
-        // Price
         const priceEl = item.querySelector('[itemprop="price"], .iva-item-priceStep-2qRpg');
         let price = '0';
         if (priceEl) {
@@ -269,22 +251,18 @@ async function parsePageData(page, limit) {
                  priceEl.textContent.replace(/\D+/g, '') || '0';
         }
 
-        // Link
         const linkEl = item.querySelector('[itemprop="url"], .iva-item-titleStep-2bjhf a');
         let link = '#';
         if (linkEl) {
           link = linkEl.href || `https://www.avito.ru${linkEl.getAttribute('href')}`;
         }
 
-        // Date
         const dateEl = item.querySelector('[data-marker="item-date"], .iva-item-dateInfoStep-2uc5s');
         const date = dateEl ? parseDate(dateEl.textContent) : new Date().toISOString();
 
-        // Description (if available)
         const descEl = item.querySelector('[data-marker="item-specific-params"], .iva-item-descriptionStep-2qRpg');
         const description = descEl ? descEl.textContent.trim() : '';
 
-        // Location (if available)
         const locationEl = item.querySelector('[data-marker="item-address"], .iva-item-locationStep-2UHp2');
         const location = locationEl ? locationEl.textContent.trim() : '';
 
