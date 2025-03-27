@@ -19,7 +19,6 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
-// Обработчики IPC
 ipcMain.handle('parse-data', async (_, { keyword, price, city, limit = 50 }) => {
     try {
         const results = await require('./puppeteer-parser')(keyword, price, city, limit);
@@ -84,7 +83,7 @@ ipcMain.handle('test-telegram-bot', async (_, { token, chatId }) => {
     }
 });
 
-// Запуск приложения
+
 app.whenReady().then(() => {
     createWindow();
     
@@ -105,7 +104,7 @@ app.on('window-all-closed', () => {
     }
 });
 
-// Инициализация localStorage для main процесса
+
 if (!global.localStorage) {
     global.localStorage = {
         store: {},
