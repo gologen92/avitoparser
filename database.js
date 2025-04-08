@@ -35,7 +35,15 @@ function saveAd(ad) {
     if (!ad.id) throw new Error('Не указан ID объявления');
     if (!ad.title) throw new Error('Не указано название объявления');
     if (!ad.url) throw new Error('Не указана ссылка на объявление');
-
+// Проверяем, существует ли уже объявление с таким URL
+    const existingAd = db.prepare('SELECT id FROM saved_ads WHERE url = ?').get(ad.url);
+      if (existingAd) {
+        return {
+        success: false,
+        error: 'Объявление уже сохранено',
+        changes: 0
+      };
+    }
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO saved_ads (id, title, price, url, date, saved_at)
       VALUES (?, ?, ?, ?, ?, ?)

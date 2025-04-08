@@ -352,20 +352,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function filterByDate(results, filterType, dateFrom, dateTo) {
-      if (filterType === 'all') return results;
-
-      const now = new Date();
-      let startDate, endDate;
-
-      if (filterType === 'today') {
-          startDate = new Date(now.setHours(0, 0, 0, 0));
-          endDate = new Date();
-          return results.filter(item => {
-              try {
-                  const itemDate = new Date(item.date);
-                  return itemDate >= startDate && itemDate <= endDate;
-              } catch {
-                  return false;
+    if (filterType === 'all') return results;
+  
+    const now = new Date();
+    let startDate, endDate;
+  
+    if (filterType === 'today') {
+      startDate = new Date(now);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
+      
+      return results.filter(item => {
+        try {
+          const itemDate = new Date(item.date);
+          return itemDate >= startDate && itemDate <= endDate;
+        } catch {
+          return false;
               }
           });
       }

@@ -182,14 +182,43 @@ async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
 async function parsePageData(page, limit) {
   return await page.evaluate((limit) => {
     function parseDate(dateText) {
-      if (!dateText) return new Date().toISOString();
-    
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const timeRegex = /(\d{1,2}):(\d{1,2})/;
-    
-      try {
-        // Today's time
+  if (!dateText) return new Date().toISOString();
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const timeRegex = /(\d{1,2}):(\d{1,2})/;
+  const relativeRegex = /(\d+)\s+(минут[а-я]*|час[а-я]*|день|дн[я-я]*|секунд[а-я]*)/i;
+
+  try {
+    // "Только что" или "1 минуту назад"
+    if (/только что/i.test(dateText) || /только что/i.test(dateText)) {
+      return new Date().toISOString();
+    }
+
+    // Парсинг относительного времени
+    const relativeMatch = dateText.match(relativeRegex);
+    if (relativeMatch) {
+      const value = parseInt(relativeMatch[1]);
+      const unit = relativeMatch[2].toLowerCase();
+      
+      const date = new Date();
+      
+      if (unit.startsWith('секунд')) {
+        date.setSeconds(date.getSeconds() - value);
+      } else if (unit.startsWith('минут')) {
+        date.setMinutes(date.getMinutes() - value);
+      } else if (unit.startsWith('час')) {
+        date.setHours(date.getHours() - value);
+      } else if (unit.startsWith('дн')) {
+        date.setDate(date.getDate() - value);
+      }
+      
+      return date.toISOString();
+    }
+        // Сегодня с временем
         if (/сегодня/i.test(dateText)) {
           const timeMatch = dateText.match(timeRegex);
           if (timeMatch) {
@@ -197,22 +226,25 @@ async function parsePageData(page, limit) {
             date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
             return date.toISOString();
           }
+          return today.toISOString();
         }
     
-       if (/вчера/i.test(dateText)) {
+        // Вчера с временем
+        if (/вчера/i.test(dateText)) {
           const timeMatch = dateText.match(timeRegex);
           if (timeMatch) {
-            const date = new Date(today);
-            date.setDate(date.getDate() - 1);
+            const date = new Date(yesterday);
             date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]));
             return date.toISOString();
           }
+          return yesterday.toISOString();
         }
     
-       const months = {
-          'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3,
-          'мая': 4, 'июн': 5, 'июл': 6, 'август': 7,
-          'сентябр': 8, 'октябр': 9, 'ноябр': 10, 'декабр': 11
+        // Полная дата (например, "20 мая в 12:30" или "15 марта 2023")
+        const months = {
+          'январ': 0, 'феврал': 1, 'март': 2, 'апрел': 3, 'мая': 4,
+          'июн': 5, 'июл': 6, 'август': 7, 'сентябр': 8,
+          'октябр': 9, 'ноябр': 10, 'декабр': 11
         };
     
         const dateMatch = dateText.match(/(\d{1,2})\s+([а-я]+)(?:\s+(\d{4}))?(?:\s+в\s+(\d{1,2}):(\d{1,2}))?/i);
