@@ -22,18 +22,47 @@ if (!fs.existsSync(CONFIG.debugDir)) {
 
 function transliterateCity(cityName) {
   if (!cityName || cityName.toLowerCase() === 'россия') return 'rossiya';
-  
-  const dict = {
-    'москва': 'moskva',
-    'санкт-петербург': 'sankt-peterburg',
-    'новосибирск': 'novosibirsk',
-    'екатеринбург': 'ekaterinburg',
-    'казань': 'kazan',
-    'нижний новгород': 'nizhniy_novgorod',
-    'ростов-на-дону': 'rostov-na-donu'
+  // Костыль для городов с мягким знаком
+  const softSignCities = {
+    'ставрополь': 'stavropol',
+    'пермь': 'perm',
+    'симферополь': 'simferopol',
+    'севастополь': 'sevastopol',
+    'керчь': 'kerch',
+    'ульяновск': 'ulyanovsk',
+    'архангельск': 'arkhangelsk',
+    'ярославль': 'yaroslavl',
+    'тверь': 'tver',
+    'нальчик': 'nalchik'
   };
+
+  // Проверяем, есть ли город в списке исключений
+  const lowerCity = cityName.toLowerCase();
+  if (softSignCities[lowerCity]) {
+    return softSignCities[lowerCity];
+  }
+  // Словарь для замены кириллических символов
+  const translitMap = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    ' ': '-', '_': '-'
+  };
+
+  // Приводим к нижнему регистру и транслитерируем
+  let result = '';
   
-  return dict[cityName.toLowerCase()] || cityName.toLowerCase().replace(/\s+/g, '-');
+  for (let i = 0; i < lowerCity.length; i++) {
+    const char = lowerCity[i];
+    result += translitMap[char] || char;
+  }
+
+  // Удаляем повторяющиеся дефисы и дефисы в начале/конце
+  return result
+    .replace(/-+/g, '-')  // "--" → "-"
+    .replace(/^-|-$/g, ''); // удаляем дефисы по краям
 }
 
 async function parseAvito(keyword, maxPrice, city = 'rossiya', limit = 50) {
