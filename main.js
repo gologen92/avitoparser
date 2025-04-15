@@ -93,6 +93,10 @@ ipcMain.handle('test-telegram-bot', async (_, { token, chatId }) => {
   }
 });
 
+ipcMain.handle('export-to-excel', async (_, filePath) => {
+  return db.exportToExcel(filePath);
+});
+
 // Запуск приложения
 app.whenReady().then(() => {
   createWindow();

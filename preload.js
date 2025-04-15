@@ -7,7 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSavedAds: () => ipcRenderer.invoke('get-saved-ads'),
   initTelegramBot: (token, chatId) => ipcRenderer.invoke('init-telegram-bot', { token, chatId }),
   testTelegramBot: (token, chatId) => ipcRenderer.invoke('test-telegram-bot', { token, chatId }),
-  onSavedAdsLoaded: (callback) => ipcRenderer.on('saved-ads-loaded', callback)
+  onSavedAdsLoaded: (callback) => ipcRenderer.on('saved-ads-loaded', callback),
+  exportToExcel: (filePath) => ipcRenderer.invoke('export-to-excel', filePath)
 });
 
 // Безопасная обработка ошибок

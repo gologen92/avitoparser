@@ -13,8 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const limitInput = document.getElementById('limit');
     const dateFromInput = document.getElementById('dateFrom');
     const dateToInput = document.getElementById('dateTo');
-    
-    // Элементы для Telegram
+    const exportBtn = document.getElementById('exportBtn');
     const telegramModal = document.getElementById('telegramModal');
     const telegramTokenInput = document.getElementById('telegramToken');
     const telegramChatIdInput = document.getElementById('telegramChatId');
@@ -34,25 +33,42 @@ document.addEventListener('DOMContentLoaded', () => {
     // Инициализация приложения
     async function init() {
         try {
-        initSorting();
-        setupEventListeners();
-        setupDefaultDates();
-        restoreSearchParams();
-        setupTelegramUI();
-        showStatusMessage('Загрузка сохраненных объявлений...', 'info');
-        await loadSavedAds(); // Загружаем сохраненные объявления при старте
-    }catch (error) {
-        console.error('Ошибка инициализации:', error);
-        showStatusMessage('Ошибка загрузки приложения', 'error');
-        window.electronAPI.onSavedAdsLoaded((event, ads) => {
-            savedAds = ads.map(ad => ({
-              ...ad,
-              priceNum: parseInt((ad.price || '0').replace(/\D/g, '')) || 0
-            }));
-            displaySavedAds(sortData(savedAds, savedSort.field, savedSort.order));
-          });
+            initTabs();
+            initSorting();
+            setupEventListeners();
+            setupDefaultDates();
+            restoreSearchParams();
+            setupTelegramUI();
+            showStatusMessage('Загрузка сохраненных объявлений...', 'info');
+            await loadSavedAds();
+        } catch (error) {
+            console.error('Ошибка инициализации:', error);
+            showStatusMessage('Ошибка загрузки приложения', 'error');
+        }
     }
- }
+
+    // Инициализация вкладок (новая реализация)
+    function initTabs() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Удаляем active у всех кнопок и контента
+                document.querySelectorAll('.tab-btn, .tab-content').forEach(el => {
+                    el.classList.remove('active');
+                });
+                
+                // Добавляем active к выбранной кнопке и контенту
+                const tabId = btn.dataset.tab;
+                btn.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+
+                // Показываем сообщение если перешли на пустые сохранённые
+                if (tabId === 'saved' && savedAds.length === 0) {
+                    document.getElementById('empty-saved').style.display = '';
+                }
+            });
+        });
+    }
+
     // Настройка сортировки таблиц
     function initSorting() {
         document.querySelectorAll('#results-table .sortable').forEach(header => {
@@ -134,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         startBtn.addEventListener('click', startParsing);
         clearBtn.addEventListener('click', clearResults);
+        exportBtn.addEventListener('click', exportToExcel);
     }
 
     // Настройка Telegram интерфейса
@@ -266,6 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showStatusMessage(`Загружено ${savedAds.length} сохраненных объявлений`, 'success');
             } else {
                 showStatusMessage('Нет сохраненных объявлений', 'info');
+                document.getElementById('empty-saved').style.display = '';
             }
         } catch (error) {
             console.error('Ошибка загрузки:', error);
@@ -275,8 +293,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Отображение сохраненных объявлений
     function displaySavedAds(ads) {
-        savedBody.innerHTML = ads.map(ad => `
-            <tr data-id="${ad.id}">
+        const emptyRow = document.getElementById('empty-saved');
+        const tbody = document.getElementById('saved-body');
+        
+        // Очищаем таблицу (кроме строки пустого состояния)
+        tbody.querySelectorAll('tr:not(#empty-saved)').forEach(row => row.remove());
+        
+        if (ads.length === 0) {
+            if (emptyRow) emptyRow.style.display = '';
+            return;
+        }
+
+        // Скрываем пустое состояние
+        if (emptyRow) emptyRow.style.display = 'none';
+        
+        // Добавляем объявления
+        ads.forEach(ad => {
+            const row = document.createElement('tr');
+            row.dataset.id = ad.id;
+            row.innerHTML = `
                 <td>${escapeHtml(ad.title)}${ad.description ? `<br><small>${escapeHtml(ad.description)}</small>` : ''}</td>
                 <td>${formatPrice(ad.price)}</td>
                 <td>${formatDateTime(ad.date)}${ad.location ? `<br><small>${escapeHtml(ad.location)}</small>` : ''}</td>
@@ -285,9 +320,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <a href="${ad.link}" target="_blank" class="action-btn">Открыть</a>
                     <button class="action-btn delete-btn">Удалить</button>
                 </td>
-            </tr>
-        `).join('');
+            `;
+            tbody.appendChild(row);
+        });
 
+        // Назначаем обработчики удаления
         document.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 if (confirm('Вы уверены, что хотите удалить это объявление?')) {
@@ -295,6 +332,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const id = row.dataset.id;
                     await deleteSavedAd(id);
                     row.remove();
+                    
+                    // Показываем пустое состояние если удалили последнее
+                    if (document.querySelectorAll('#saved-body tr:not(#empty-saved)').length === 0) {
+                        document.getElementById('empty-saved').style.display = '';
+                        showStatusMessage('Нет сохраненных объявлений', 'info');
+                    }
                 }
             });
         });
@@ -357,6 +400,32 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Ошибка сохранения объявления:', error);
             showStatusMessage(`Ошибка сохранения: ${error.message}`, 'error');
+        }
+    }
+
+    // Экспорт в Excel
+    async function exportToExcel() {
+        try {
+            const { filePath } = await window.electronAPI.showSaveDialog({
+                title: 'Экспорт в Excel',
+                defaultPath: `avito_ads_${new Date().toISOString().slice(0,10)}.xlsx`,
+                filters: [
+                    { name: 'Excel Files', extensions: ['xlsx'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
+            });
+
+            if (!filePath) return;
+
+            const result = await window.electronAPI.exportToExcel(filePath);
+            if (result.success) {
+                showStatusMessage(`Данные экспортированы в ${filePath}`, 'success');
+            } else {
+                showStatusMessage(`Ошибка экспорта: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Ошибка экспорта:', error);
+            showStatusMessage('Ошибка при экспорте данных', 'error');
         }
     }
 

@@ -1,6 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-
+const XLSX = require('xlsx');
 const dbPath = path.join(__dirname, 'avito-parser.db');
 const db = new Database(dbPath, { verbose: console.log });
 
@@ -118,6 +118,49 @@ function getStats() {
         return null;
     }
 }
+//Экспорт в Эксель
+function exportToExcel(filePath) {
+  try {
+      const ads = db.prepare(`
+          SELECT title, price, url, date, description, location, 
+                 strftime('%Y-%m-%d %H:%M', saved_at) as saved_at
+          FROM saved_ads
+          ORDER BY saved_at DESC
+      `).all();
+
+      if (ads.length === 0) {
+          return { success: false, error: 'Нет данных для экспорта' };
+      }
+
+      // Формируем рабочий лист
+      const ws = XLSX.utils.json_to_sheet(ads.map(ad => ({
+          'Название': ad.title,
+          'Цена': ad.price,
+          'Ссылка': ad.url,
+          'Дата публикации': ad.date,
+          'Описание': ad.description,
+          'Местоположение': ad.location,
+          'Дата сохранения': ad.saved_at
+      })));
+
+      // Создаём книгу и добавляем лист
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Объявления');
+
+      // Записываем файл
+      XLSX.writeFile(wb, filePath);
+      
+      return { success: true, path: filePath };
+  } catch (error) {
+      console.error('Ошибка экспорта в Excel:', error);
+      return { success: false, error: error.message };
+  }
+}
+
+module.exports = {
+  // ... остальные экспорты
+  exportToExcel
+};
 
 module.exports = {
     db,

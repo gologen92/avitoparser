@@ -1,244 +1,319 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Avito Parser</title>
     <style>
-        body { 
-            font-family: Arial; 
-            padding: 20px; 
-            display: flex; 
-            font-size: 14px;
+        body {
+            font-family: Arial, sans-serif;
             margin: 0;
-            height: 100vh;
-            box-sizing: border-box;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
-        .main-content { 
-            flex: 1; 
-            padding-right: 20px;
-            min-width: 400px;
-            overflow: auto;
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        .saved-ads { 
-            width: 50%;
-            min-width: 400px;
-            border-left: 1px solid #ddd; 
-            padding-left: 20px;
-            background-color: #f9f9f9;
-            overflow: auto;
-            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
         }
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
+        .search-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
             margin-top: 10px;
-            font-size: 12px;
         }
-        th, td { 
-            border: 1px solid #ddd; 
-            padding: 6px; 
+        .action-btn {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .action-btn:hover {
+            background-color: #45a049;
+        }
+        .action-btn.delete-btn {
+            background-color: #f44336;
+        }
+        .action-btn.delete-btn:hover {
+            background-color: #d32f2f;
+        }
+        .action-btn.save-btn {
+            background-color: #2196F3;
+        }
+        .action-btn.save-btn:hover {
+            background-color: #0b7dda;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
             text-align: left;
+            border-bottom: 1px solid #ddd;
         }
         th {
             background-color: #f2f2f2;
+            font-weight: bold;
             cursor: pointer;
-            position: relative;
         }
-        .search-params {
+        th.sortable:hover {
+            background-color: #e6e6e6;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .status-indicator {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status-info {
+            background-color: #e7f3fe;
+            color: #31708f;
+        }
+        .status-success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .status-error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .status-warning {
+            background-color: #fcf8e3;
+            color: #8a6d3b;
+        }
+        .loader {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 5px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 400px;
+            border-radius: 8px;
+        }
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-btn:hover {
+            color: black;
+        }
+        .telegram-input {
             margin-bottom: 15px;
-            width: 100%;
         }
-        .search-params td {
-            padding: 5px;
-        }
-        .search-params input, .search-params select {
-            width: 100%;
-            padding: 5px;
-            box-sizing: border-box;
-        }
-        .action-buttons {
+        #telegramTestResult {
+            padding: 10px;
             margin-top: 10px;
+            border-radius: 4px;
+            display: none;
         }
-        .action-buttons button {
-            padding: 6px 12px;
-            margin-right: 5px;
+        #output {
+            min-height: 20px;
+            margin-bottom: 20px;
         }
-        .sortable { 
-            cursor: pointer; 
-            user-select: none; 
-            position: relative;
-            padding-right: 15px;
+        small {
+            color: #666;
+            font-size: 0.9em;
         }
-        .sort-icon {
-            position: absolute;
-            right: 3px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 10px;
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 15px;
         }
-        .action-btn {
-            padding: 2px 5px;
-            font-size: 11px;
-            margin-left: 3px;
+        .tab-btn {
+            padding: 8px 15px;
+            background-color: #e0e0e0;
+            border: none;
+            cursor: pointer;
         }
-        #customDates {
-            margin-top: 5px;
+        .tab-btn.active {
+            background-color: #4CAF50;
+            color: white;
         }
-        #customDates input {
-            width: calc(50% - 10px);
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
     </style>
-    <style>
-        .modal {
-          display: none;
-          position: fixed;
-          z-index: 1000;
-          left: 0;
-          top: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0,0,0,0.7);
-        }
-        
-        .modal-content {
-          background-color: #fefefe;
-          margin: 10% auto;
-          padding: 20px;
-          border: 1px solid #888;
-          width: 80%;
-          max-width: 500px;
-          border-radius: 5px;
-          box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
-        }
-        
-        .close-btn {
-          color: #aaa;
-          float: right;
-          font-size: 28px;
-          font-weight: bold;
-          cursor: pointer;
-        }
-        
-        .close-btn:hover {
-          color: black;
-        }
-        
-        #openTelegramSettings {
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          padding: 10px 15px;
-          background: #555;
-          color: white;
-          border: none;
-          border-radius: 50%;
-          cursor: pointer;
-          z-index: 100;
-        }
-        
-        #openTelegramSettings:hover {
-          background: #333;
-        }
-      </style>
 </head>
 <body>
-    <div class="main-content">
-        <h1>Avito Parser</h1>
-        
-        <table class="search-params">
-            <tr>
-                <td width="30%">Ключевые слова:</td>
-                <td><input id="keyword" placeholder="Введите ключевые слова"></td>
-            </tr>
-            <tr>
-                <td>Максимальная цена:</td>
-                <td><input id="price" placeholder="Введите максимальную цену"></td>
-            </tr>
-            <tr>
-                <td>Город:</td>
-                <td><input id="city" placeholder="Введите город"></td>
-            </tr>
-            <tr>
-                <td>Количество объявлений:</td>
-                <td><input id="limit" type="number" min="1" value="50"></td>
-            </tr>
-            <tr>
-                <td>Период:</td>
-                <td>
-                    <select id="dateFilter">
-                        <option value="today">За сегодня</option>
-                        <option value="all">За всё время</option>
-                        <option value="custom">Произвольный период</option>
-                    </select>
-                    <div id="customDates" style="display: none;">
-                        <input type="date" id="dateFrom"> до <input type="date" id="dateTo">
-                    </div>
-                </td>
-            </tr>
-        </table>
+    <div class="container">
+        <div class="header">
+            <h1>Avito Parser</h1>
+            <div class="action-buttons">
+                <button id="openTelegramSettings" class="action-btn">Telegram</button>
+                <button id="exportBtn" class="action-btn">Экспорт в Excel</button>
+            </div>
+        </div>
+
+        <div class="search-panel">
+            <div class="input-group">
+                <label for="keyword">Ключевые слова</label>
+                <input type="text" id="keyword" placeholder="Например: iPhone 12">
+            </div>
+            <div class="input-group">
+                <label for="price">Макс. цена (₽)</label>
+                <input type="number" id="price" placeholder="Необязательно">
+            </div>
+            <div class="input-group">
+                <label for="city">Город</label>
+                <input type="text" id="city" placeholder="Москва" value="Москва">
+            </div>
+            <div class="input-group">
+                <label for="limit">Лимит объявлений</label>
+                <input type="number" id="limit" value="50" min="1" max="200">
+            </div>
+            <div class="input-group">
+                <label for="dateFilter">Фильтр по дате</label>
+                <select id="dateFilter">
+                    <option value="all">Все</option>
+                    <option value="today">Сегодня</option>
+                    <option value="custom">Выбрать даты</option>
+                </select>
+            </div>
+            <div id="customDates" class="input-group" style="display: none;">
+                <label for="dateFrom">С</label>
+                <input type="date" id="dateFrom">
+                <label for="dateTo">По</label>
+                <input type="date" id="dateTo">
+            </div>
+        </div>
 
         <div class="action-buttons">
-            <button id="startBtn">Начать поиск</button>
-            <button id="clearBtn">Очистить</button>
+            <button id="startBtn" class="action-btn">Начать поиск</button>
+            <button id="clearBtn" class="action-btn">Очистить</button>
         </div>
-        
-        <div id="output" style="margin-top: 10px;"></div>
-        
-        <h2>Результат</h2>
-        <table id="results-table">
-            <thead>
-                <tr>
-                    <th class="sortable" data-sort="title">Название <span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="price">Цена <span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="date">Когда размещено <span class="sort-icon"></span></th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="results-body"></tbody>
-        </table>
+
+        <div id="output"></div>
+
+        <div class="tab-buttons">
+            <button class="tab-btn active" data-tab="results">Результаты поиска</button>
+            <button class="tab-btn" data-tab="saved">Сохранённые объявления</button>
+        </div>
+
+        <div id="results" class="tab-content active">
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="title">Название <span class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="price">Цена <span class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="date">Дата <span class="sort-icon"></span></th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body"></tbody>
+            </table>
+        </div>
+
+        <div id="saved" class="tab-content">
+            <table id="saved-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="title">Название <span class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="price">Цена <span class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="date">Дата публикации <span class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="saved_at">Дата сохранения <span class="sort-icon"></span></th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="saved-body">
+                    <!-- Пустое состояние -->
+                    <tr id="empty-saved" style="display: none;">
+                        <td colspan="5" style="text-align: center; color: #666;">
+                            Нет сохранённых объявлений
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="saved-ads">
-        <h2>Сохраненные объявления</h2>
-        <table id="saved-table">
-            <thead>
-                <tr>
-                    <th class="sortable" data-sort="title">Название <span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="price">Цена <span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="date">Когда размещено <span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="saved_at">Когда сохранено <span class="sort-icon"></span></th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="saved-body"></tbody>
-        </table>
+    <!-- Модальное окно Telegram -->
+    <div id="telegramModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Настройки Telegram</h2>
+            <div class="telegram-input">
+                <label for="telegramToken">Токен бота</label>
+                <input type="text" id="telegramToken" placeholder="123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+            </div>
+            <div class="telegram-input">
+                <label for="telegramChatId">ID чата</label>
+                <input type="text" id="telegramChatId" placeholder="-1001234567890">
+            </div>
+            <div class="action-buttons">
+                <button id="saveTelegramSettings" class="action-btn">Сохранить</button>
+                <button id="testTelegramSettings" class="action-btn">Тест</button>
+            </div>
+            <div id="telegramTestResult"></div>
+        </div>
     </div>
 
-    <script src="renderer.js"></script>
-
-    <div id="telegramModal" class="modal" style="display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.7);overflow:auto">
-        <div class="modal-content" style="background:#fefefe;margin:10% auto;padding:20px;border:1px solid #888;width:80%;max-width:500px;border-radius:5px;box-shadow:0 4px 8px 0 rgba(0,0,0,0.2)">
-          <span class="close-btn" style="float:right;font-size:28px;cursor:pointer">&times;</span>
-          <h2 style="color:#333">Настройки Telegram уведомлений</h2>
-          <div style="margin:15px 0">
-            <label style="display:block;margin-bottom:5px;font-weight:bold">Токен бота:</label>
-            <input type="text" id="telegramToken" placeholder="Введите токен бота" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px">
-            <small style="color:#666">Получить у @BotFather в Telegram</small>
-          </div>
-          <div style="margin:15px 0">
-            <label style="display:block;margin-bottom:5px;font-weight:bold">Chat ID:</label>
-            <input type="text" id="telegramChatId" placeholder="Введите chat ID" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px">
-            <small style="color:#666">Узнать у @userinfobot в Telegram</small>
-          </div>
-          <div style="margin-top:25px">
-            <button id="saveTelegramSettings" style="padding:10px 20px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:10px">Сохранить</button>
-            <button id="testTelegramSettings" style="padding:10px 20px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer">Проверить</button>
-          </div>
-          <div id="telegramTestResult" style="margin-top:15px;padding:10px;border-radius:4px;display:none"></div>
-        </div>
-      </div>
-      
-      <button id="openTelegramSettings" style="position:fixed;bottom:20px;right:20px;padding:10px 15px;background:#555;color:white;border:none;border-radius:50%;cursor:pointer;z-index:100">TG</button>
-
+    <script src="./renderer.js"></script>
 </body>
 </html>
